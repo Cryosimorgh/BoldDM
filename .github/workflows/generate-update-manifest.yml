@@ -1,0 +1,26 @@
+name: Generate update manifest
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate manifest
+        shell: bash
+        run: |
+          mkdir -p update
+          VERSION=${GITHUB_REF_NAME}
+          printf '{\n  "version": "%s",\n  "channel": "stable",\n  "files": []\n}\n' "$VERSION" > update.json
+
+      - name: Upload manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: update-manifest
+          path: update.json
