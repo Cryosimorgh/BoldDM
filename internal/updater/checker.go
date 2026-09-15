@@ -2,6 +2,7 @@ package updater
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 )
 
