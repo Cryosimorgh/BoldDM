@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>BoltDM</title>
+<link rel="stylesheet" href="/app.css">
+<style id="customUserCSS"></style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><div class="brandmark"></div><div class="brandtext"><b>BOLTDM</b><small>download manager</small></div></div>
+    <nav class="nav" id="nav">
+      <button class="navbtn active" data-filter="all"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span>All downloads</span><span class="count" id="c-all">0</span></button>
+      <button class="navbtn" data-filter="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14"/></svg><span>Active</span><span class="count" id="c-active">0</span></button>
+      <button class="navbtn" data-filter="queued"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg><span>Queued</span><span class="count" id="c-queued">0</span></button>
+      <button class="navbtn" data-filter="completed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m5 12 4 4L19 6"/></svg><span>Completed</span><span class="count" id="c-completed">0</span></button>
+      <button class="navbtn" data-filter="failed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 8v5m0 3h.01M4.5 19h15L12 5 4.5 19Z"/></svg><span>Attention</span><span class="count" id="c-failed">0</span></button>
+    </nav>
+    <div class="sidebottom">
+      <div class="engine"><div class="engine-row"><span class="dot" id="engineDot"></span><span id="engineText">Engine online</span></div><small>127.0.0.1 : 17654</small></div>
+      <button class="navbtn" id="settingsBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.09.36.3.7.6 1 .3.3.7.45 1.1.4h.09v4h-.09c-.4-.05-.8.1-1.1.4-.3.3-.51.64-.6 1Z"/></svg><span>Settings</span></button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="titleblock"><h1 id="viewTitle">All downloads</h1><p id="viewSub">DOWNLOAD LIST</p></div>
+      <div class="topspace"></div>
+      <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="search" placeholder="Search downloads"></label>
+      <button class="btn" id="speedBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 16a8 8 0 1 1 16 0"/><path d="m12 16 4-5"/><path d="M6.3 13.5h.01M17.7 13.5h.01"/></svg><span id="speedBtnText">Unlimited</span></button>
+      <button class="btn" id="pauseAll"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 5v14M16 5v14"/></svg><span class="label">Pause all</span></button>
+      <button class="btn" id="resumeAll"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m8 5 11 7-11 7V5Z"/></svg><span class="label">Resume all</span></button>
+      <button class="btn gold" id="addBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg><span class="label">New download</span></button>
+      <div class="speedpop" id="speedPop"><div class="headline"><b>Global speed limit</b><span id="speedCurrent">Unlimited</span></div><div class="presets" id="speedPresets"></div><div class="quickcustom"><input class="input" id="speedQuick" type="number" min="0" step="0.1" placeholder="Custom"><select class="select" id="speedQuickUnit"><option value="1048576">MB/s</option><option value="1024">KB/s</option></select><button class="btn small gold" id="speedQuickApply">Apply</button></div></div>
+    </header>
+
+    <section class="workspace">
+      <div class="metrics">
+        <div class="metric primary"><span class="label">Current throughput</span><strong id="m-speed">0 <span class="rateunit">B/s</span></strong></div>
+        <div class="metric"><span class="label">Active</span><strong id="m-active">0</strong></div>
+        <div class="metric"><span class="label">Queued</span><strong id="m-queued">0</strong></div>
+        <div class="metric"><span class="label">Completed</span><strong id="m-completed">0</strong></div>
+        <div class="metric-actions"><button class="btn" id="openFolder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7h7l2 2h9v10H3V7Z"/></svg>Open folder</button><button class="btn icon" id="moreBulk" title="Retry failed / clear completed"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+      </div>
+      <div class="tablehead"><span>Download</span><span>Status</span><span class="col-speed">Speed / ETA</span><span class="col-size">Downloaded</span><span class="col-segments">Segments / connections</span><span></span></div>
+      <div class="listwrap"><div class="list" id="list"></div></div>
+    </section>
+  </main>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="modal" id="addModal">
+  <div class="modalhead"><h2>New download</h2><button class="action" data-close><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+  <div class="modalbody">
+    <div class="field"><label>Source URL</label><input class="input" id="addUrl" placeholder="https://…" autocomplete="off"></div>
+    <div class="field"><label>Save to</label><div class="pathrow"><input class="input" id="addDir"><button class="btn" id="pickAddDir">Browse</button></div><div class="hint">Leave this at the default or choose another folder for this download.</div></div>
+  </div>
+  <div class="modalfoot"><button class="btn" data-close>Cancel</button><button class="btn gold" id="confirmAdd">Start download</button></div>
+</div>
+
+<div class="modal" id="bulkModal">
+  <div class="modalhead"><h2>Queue maintenance</h2><button class="action" data-close><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+  <div class="modalbody"><div class="grid2"><button class="btn" id="retryFailed">Retry failed</button><button class="btn" id="clearCompleted">Clear completed</button><button class="btn danger" id="cancelAll">Cancel active queue</button><button class="btn" id="openFolder2">Open download folder</button></div></div>
+</div>
+
+<div class="modal" id="removeModal">
+  <div class="modalhead"><h2>Remove download</h2><button class="action" data-close><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+  <div class="modalbody"><p style="margin:0;color:var(--muted);font-size:calc(11px * var(--font-scale));line-height:1.65">Remove <b id="removeName" style="color:var(--text);font-weight:600"></b> from BoltDM. You can keep the downloaded/partial file, or delete it from disk as well.</p></div>
+  <div class="modalfoot"><button class="btn" data-close>Cancel</button><button class="btn" id="removeKeep">Remove only</button><button class="btn danger" id="removeDelete">Delete file & remove</button></div>
+</div>
+
+<aside class="drawer" id="settingsDrawer">
+  <div class="drawerhead"><div><h2>Settings</h2><div class="hint" style="margin-top:4px">Control downloads, folders, appearance and startup behavior.</div></div><button class="action" id="closeSettings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+  <div class="settings-tabs" id="settingsTabs">
+    <button class="stab active" data-stab="general">General</button><button class="stab" data-stab="engine">Engine</button><button class="stab" data-stab="storage">Folders</button><button class="stab" data-stab="appearance">Appearance</button>
+  </div>
+  <div class="drawerbody">
+    <section class="settings-panel active" data-spanel="general">
+      <div class="sectionlabel">Startup</div>
+      <div class="field"><label>Launch behavior</label><select class="select" id="setLaunch"><option value="dashboard">Open dashboard on launch</option><option value="tray">Start in system tray</option></select><div class="hint">The tray icon remains available either way. Right-click it for Open, Pause all, Resume all and Exit.</div></div>
+      <div class="badge-note">Closing the browser tab does not stop BoltDM. Use the tray icon → Exit BoltDM, or the Quit button below, for a full shutdown.</div>
+    </section>
+
+    <section class="settings-panel" data-spanel="engine">
+      <div class="sectionlabel">Download engine</div>
+      <div class="grid2">
+        <div class="field"><label>Concurrent files</label><input class="input" id="setActive" type="number" min="1" max="32"><div class="hint">Files downloading at the same time.</div></div>
+        <div class="field"><label>Files per host</label><input class="input" id="setHost" type="number" min="1" max="32"><div class="hint">Prevents one server from consuming the whole queue.</div></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Segments per file</label><input class="input" id="setSegments" type="number" min="1" max="64"><div class="hint">Resume data granularity. 8–16 is usually enough.</div></div>
+        <div class="field"><label>Connections per file</label><input class="input" id="setConnections" type="number" min="1" max="32"><div class="hint">Active connections. Cannot exceed active segments.</div></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Minimum segment size</label><div class="grid2" style="grid-template-columns:1fr 90px"><input class="input" id="setMinSegment" type="number" min="0.25" step="0.25"><select class="select" id="setMinSegmentUnit"><option value="1048576">MB</option><option value="1024">KB</option></select></div><div class="hint">Small files use one connection below this size.</div></div>
+        <div class="field"><label>Retry attempts</label><input class="input" id="setRetries" type="number" min="1" max="20"><div class="hint">How many times a segment retries before the download is marked failed.</div></div>
+      </div>
+      <div class="field"><label>Global speed limit</label><div class="grid2"><input class="input" id="setSpeed" type="number" min="0" step="0.1"><select class="select" id="setSpeedUnit"><option value="1048576">MB/s</option><option value="1024">KB/s</option></select></div><div class="presets" id="settingsSpeedPresets" style="margin-top:8px"></div><div class="hint">0 means unlimited. This limit is shared by every active download and connection.</div></div>
+      <div class="settings-actions"><button class="btn" id="applyEngineActive">Save defaults & restart active</button></div>
+      <div class="divider"></div>
+      <div class="sectionlabel">Per-download settings</div>
+      <div class="tuning-list" id="tuningList"></div>
+      <div class="hint">Use 0 to inherit the global default. Applying settings to an active download restarts its connections without discarding valid partial data.</div>
+    </section>
+
+    <section class="settings-panel" data-spanel="storage">
+      <div class="sectionlabel">Default download folder</div>
+      <div class="field"><label>Default download folder</label><div class="pathrow"><input class="input" id="setDir"><button class="btn" id="pickSetDir">Browse</button></div><div class="hint">New downloads use this folder unless you choose another folder for that download.</div></div>
+      <div class="settings-actions"><button class="btn" id="openFolder3">Open default folder</button><button class="btn" id="moveIncompleteDefault">Move incomplete to default</button></div>
+      <div class="divider"></div>
+      <div class="sectionlabel">Current download folders</div>
+      <div class="location-list" id="locationList"></div>
+      <div class="hint">Moving an active download safely pauses it, moves its partial file and resume data, then continues from the new folder.</div>
+    </section>
+
+    <section class="settings-panel" data-spanel="appearance">
+      <div class="sectionlabel">Typography</div>
+      <div class="field"><label>Font family / CSS font stack</label><input class="input" id="setFontFamily" list="fontSuggestions" placeholder='"Segoe UI Variable","Segoe UI",sans-serif'><datalist id="fontSuggestions"><option value='"Segoe UI Variable","Segoe UI",sans-serif'><option value='Inter,"Segoe UI",sans-serif'><option value='Arial,sans-serif'><option value='Georgia,serif'><option value='Consolas,"Cascadia Mono",monospace'></datalist></div>
+      <div class="grid3"><div class="field"><label>Font size</label><div class="range-row"><input class="range" id="setFontSizeRange" type="range" min="75" max="150" step="1"><input class="input" id="setFontSize" type="number" min="75" max="150"></div><div class="hint">Percentage of the designed type scale.</div></div><div class="field"><label>Base weight</label><select class="select" id="setFontWeight"><option value="300">Light 300</option><option value="400">Regular 400</option><option value="500">Medium 500</option><option value="600">Semibold 600</option><option value="700">Bold 700</option></select></div><div class="field"><label>Font style</label><select class="select" id="setFontStyle"><option value="normal">Normal</option><option value="italic">Italic</option></select></div></div>
+      <div class="grid2"><div class="field"><label>Layout density</label><select class="select" id="setDensity"><option value="compact">Compact</option><option value="balanced">Balanced</option><option value="spacious">Spacious</option></select></div><div class="field"><label>Panel corner radius</label><input class="input" id="setRadius" type="number" min="1" max="28"></div></div>
+      <label class="checkrow"><input type="checkbox" id="setReduceMotion"> Reduce interface motion</label>
+      <div class="divider"></div>
+      <div class="sectionlabel">Colors</div>
+      <div class="colorgrid"><div class="colorfield"><label>Accent</label><input type="color" id="setAccent"></div><div class="colorfield"><label>Background</label><input type="color" id="setBackground"></div><div class="colorfield"><label>Surface</label><input type="color" id="setSurface"></div><div class="colorfield"><label>Text</label><input type="color" id="setTextColor"></div></div>
+      <div class="divider"></div>
+      <div class="sectionlabel">Advanced appearance</div>
+      <div class="field"><label>Custom CSS overrides</label><textarea class="textarea" id="setCustomCSS" spellcheck="false" placeholder="/* Every visible detail can be overridden here. */
+.row { ... }"></textarea><div class="hint">Applied after BoltDM's own stylesheet. The dashboard is local-only.</div></div>
+      <div class="settings-actions"><button class="btn" id="resetAppearance">Reset appearance</button><button class="btn" id="previewAppearance">Preview changes</button></div>
+    </section>
+  </div>
+  <div class="drawerfoot" style="justify-content:space-between"><button class="btn danger" id="quitApp">Quit BoltDM</button><div style="display:flex;gap:8px"><button class="btn" id="resetSpeed">Unlimited speed</button><button class="btn gold" id="saveSettings">Save settings</button></div></div>
+</aside>
+<div class="toastwrap" id="toasts"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
