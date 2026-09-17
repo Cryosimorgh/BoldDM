@@ -74,12 +74,14 @@ type Status struct {
 }
 
 func New(endpoint, secret string) *Client {
-	endpoint = strings.TrimSpace(endpoint)
+	endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
 	if endpoint == "" {
 		endpoint = "http://127.0.0.1:6800/jsonrpc"
+	} else if !strings.HasSuffix(strings.ToLower(endpoint), "/jsonrpc") {
+		endpoint += "/jsonrpc"
 	}
 	return &Client{
-		endpoint: strings.TrimRight(endpoint, "/"),
+		endpoint: endpoint,
 		secret:   secret,
 		http:     &http.Client{Timeout: 10 * time.Second},
 	}
@@ -147,6 +149,11 @@ func (c *Client) TellStatus(ctx context.Context, gid string) (Status, error) {
 	var out Status
 	err := c.call(ctx, "aria2.tellStatus", []any{gid, keys}, &out)
 	return out, err
+}
+
+func (c *Client) ChangeOption(ctx context.Context, gid string, options map[string]any) error {
+	var ignored string
+	return c.call(ctx, "aria2.changeOption", []any{gid, options}, &ignored)
 }
 
 func (c *Client) Pause(ctx context.Context, gid string) error {
