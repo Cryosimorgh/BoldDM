@@ -140,6 +140,23 @@ func (m *Manager) Resume(id string) error {
 	return nil
 }
 
+func (m *Manager) Cancel(id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	rt := m.tasks[id]
+	if rt == nil {
+		return os.ErrNotExist
+	}
+	if rt.cancel != nil {
+		rt.cancel()
+	}
+	rt.Task.State = model.StateCanceled
+	rt.Task.SpeedBytesPerSec = 0
+	rt.Task.UploadSpeedBytesPerSec = 0
+	rt.Task.UpdatedAt = time.Now()
+	return m.saveLocked()
+}
+
 func (m *Manager) Retry(id string) error {
 	m.mu.RLock()
 	rt := m.tasks[id]
