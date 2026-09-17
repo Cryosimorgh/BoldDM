@@ -22,7 +22,9 @@ async function sendBatch(message) {
     if (cookie) headers.Cookie = cookie;
     if (message.pageUrl) headers.Referer = message.pageUrl;
     if (message.userAgent) headers['User-Agent'] = message.userAgent;
-    downloads.push({ url, headers });
+    const request = { url, headers };
+    if (message.engine) request.engine = message.engine;
+    downloads.push(request);
   }
   const response = await fetch(`${API}/api/v1/downloads`, {
     method: 'POST',
