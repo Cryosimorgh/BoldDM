@@ -1,0 +1,196 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+          cache: false
+
+      - name: Go test
+        run: go test ./...
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: JavaScript syntax
+        shell: bash
+        run: |
+          node --check internal/server/web/core.js
+          node --check internal/server/web/settings.js
+          node --check internal/server/web/events.js
+          node --check extension/content.js
+          node --check extension/popup.js
+          node --check extension/service_worker.js
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+          cache: false
+
+      - name: Build Windows
+        shell: powershell
+        run: |
+          .\build.ps1
+
+      - name: Package Windows
+        shell: powershell
+        run: |
+          $PackageDir = "dist\BoltDM-windows-amd64"
+
+          New-Item -ItemType Directory -Force -Path $PackageDir | Out-Null
+
+          Copy-Item "dist\BoltDM.exe" "$PackageDir\BoltDM.exe"
+          Copy-Item "BoltDM.ico" "$PackageDir\BoltDM.ico"
+          Copy-Item "Install-BoltDM.cmd" "$PackageDir\Install-BoltDM.cmd"
+
+          Compress-Archive `
+            -Path "$PackageDir\*" `
+            -DestinationPath "dist\BoltDM-windows-amd64.zip" `
+            -CompressionLevel Optimal
+
+          $Hash = (
+            Get-FileHash `
+              "dist\BoltDM-windows-amd64.zip" `
+              -Algorithm SHA256
+          ).Hash.ToLower()
+
+          "$Hash  BoltDM-windows-amd64.zip" |
+            Set-Content `
+              "dist\BoltDM-windows-amd64.zip.sha256" `
+              -Encoding ascii
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: |
+            dist/BoltDM-windows-amd64.zip
+            dist/BoltDM-windows-amd64.zip.sha256
+          if-no-files-found: error
+
+  linux:
+    needs: test
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - amd64
+          - arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+          cache: false
+
+      - name: Build Linux
+        shell: bash
+        run: |
+          chmod +x build.sh install-linux.sh
+
+          BOLTDM_SKIP_CHECKS=1 \
+          BOLTDM_TARGET_OS=linux \
+          BOLTDM_TARGET_ARCH=${{ matrix.arch }} \
+          ./build.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: |
+            dist/BoltDM-linux-${{ matrix.arch }}.tar.gz
+            dist/BoltDM-linux-${{ matrix.arch }}.tar.gz.sha256
+          if-no-files-found: error
+
+  release:
+    needs:
+      - test
+      - windows
+      - linux
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f release-assets/BoltDM-windows-amd64.zip
+          test -f release-assets/BoltDM-windows-amd64.zip.sha256
+
+          test -f release-assets/BoltDM-linux-amd64.tar.gz
+          test -f release-assets/BoltDM-linux-amd64.tar.gz.sha256
+
+          test -f release-assets/BoltDM-linux-arm64.tar.gz
+          test -f release-assets/BoltDM-linux-arm64.tar.gz.sha256
+
+      - name: Verify Linux hashes
+        shell: bash
+        working-directory: release-assets
+        run: |
+          sha256sum --check BoltDM-linux-amd64.tar.gz.sha256
+          sha256sum --check BoltDM-linux-arm64.tar.gz.sha256
+
+      - name: Verify Windows hash
+        shell: bash
+        working-directory: release-assets
+        run: |
+          expected="$(cut -d' ' -f1 BoltDM-windows-amd64.zip.sha256)"
+          actual="$(sha256sum BoltDM-windows-amd64.zip | cut -d' ' -f1)"
+
+          test "$expected" = "$actual"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            release-assets/BoltDM-windows-amd64.zip \
+            release-assets/BoltDM-windows-amd64.zip.sha256 \
+            release-assets/BoltDM-linux-amd64.tar.gz \
+            release-assets/BoltDM-linux-amd64.tar.gz.sha256 \
+            release-assets/BoltDM-linux-arm64.tar.gz \
+            release-assets/BoltDM-linux-arm64.tar.gz.sha256 \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "BoltDM ${GITHUB_REF_NAME}" \
+            --notes-file RELEASE_NOTES.md \
+            --verify-tag
