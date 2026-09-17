@@ -28,6 +28,7 @@ func (e *Aria2Engine) Download(ctx context.Context, task model.Task, progress Pr
 		return err
 	}
 
+	configured := make(map[string]bool)
 	ticker := time.NewTicker(350 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -46,6 +47,12 @@ func (e *Aria2Engine) Download(ctx context.Context, task model.Task, progress Pr
 		displayName := ""
 		outputPath := ""
 		for _, st := range leaves {
+			if !configured[st.GID] && e.supportsConnectionTuning(task.SourceKind) && (st.Status == "active" || st.Status == "waiting" || st.Status == "paused") {
+				if err := e.client.ChangeOption(ctx, st.GID, tuningOptions(task)); err != nil && !aria2rpc.IsNotFound(err) {
+					return fmt.Errorf("apply aria2 tuning: %w", err)
+				}
+				configured[st.GID] = true
+			}
 			if st.Status == "paused" {
 				if err := e.client.Unpause(ctx, st.GID); err != nil && !aria2rpc.IsNotFound(err) {
 					return err
@@ -134,6 +141,11 @@ func (e *Aria2Engine) Remove(ctx context.Context, task model.Task) error {
 func (e *Aria2Engine) ensureRoot(ctx context.Context, task model.Task) error {
 	st, err := e.client.TellStatus(ctx, task.ID)
 	if err == nil {
+		if e.supportsConnectionTuning(task.SourceKind) && (st.Status == "active" || st.Status == "waiting" || st.Status == "paused") {
+			if err := e.client.ChangeOption(ctx, task.ID, tuningOptions(task)); err != nil && !aria2rpc.IsNotFound(err) {
+				return fmt.Errorf("apply aria2 tuning: %w", err)
+			}
+		}
 		if st.Status == "paused" {
 			return e.client.Unpause(ctx, task.ID)
 		}
@@ -148,30 +160,23 @@ func (e *Aria2Engine) ensureRoot(ctx context.Context, task model.Task) error {
 		dir = filepath.Dir(task.OutputPath)
 	}
 	options := map[string]any{
-		"gid":                 task.ID,
-		"dir":                 dir,
-		"continue":            "true",
-		"allow-overwrite":     "false",
-		"auto-file-renaming":  "false",
-		"check-integrity":      "true",
-		"follow-torrent":       "true",
-		"follow-metalink":      "true",
+		"gid":                task.ID,
+		"dir":                dir,
+		"continue":           "true",
+		"allow-overwrite":    "false",
+		"auto-file-renaming": "false",
+		"check-integrity":     "true",
+		"follow-torrent":      "true",
+		"follow-metalink":     "true",
 	}
 	if task.SourceKind == model.SourceDirect || task.SourceKind == model.SourceFTP || task.SourceKind == model.SourceSFTP {
 		if strings.TrimSpace(task.Filename) != "" {
 			options["out"] = task.Filename
 		}
 	}
-	segments := task.SegmentSetting
-	if segments <= 0 {
-		segments = 8
+	for k, v := range tuningOptions(task) {
+		options[k] = v
 	}
-	connections := task.ConnectionSetting
-	if connections <= 0 {
-		connections = 4
-	}
-	options["split"] = strconv.Itoa(segments)
-	options["max-connection-per-server"] = strconv.Itoa(connections)
 	if task.SourceKind == model.SourceMagnet || task.SourceKind == model.SourceTorrent {
 		// BoltDM does not expose seeding policy yet. Do not leave an invisible background seed running.
 		options["seed-time"] = "0"
@@ -196,6 +201,30 @@ func (e *Aria2Engine) ensureRoot(ctx context.Context, task model.Task) error {
 		return fmt.Errorf("aria2 returned unexpected GID %s for task %s", gid, task.ID)
 	}
 	return nil
+}
+
+func (e *Aria2Engine) supportsConnectionTuning(kind model.SourceKind) bool {
+	switch kind {
+	case model.SourceDirect, model.SourceFTP, model.SourceSFTP, model.SourceMetalink:
+		return true
+	default:
+		return false
+	}
+}
+
+func tuningOptions(task model.Task) map[string]any {
+	segments := task.SegmentSetting
+	if segments <= 0 {
+		segments = 8
+	}
+	connections := task.ConnectionSetting
+	if connections <= 0 {
+		connections = 4
+	}
+	return map[string]any{
+		"split":                     strconv.Itoa(segments),
+		"max-connection-per-server": strconv.Itoa(connections),
+	}
 }
 
 func (e *Aria2Engine) pauseTree(ctx context.Context, root string) error {
