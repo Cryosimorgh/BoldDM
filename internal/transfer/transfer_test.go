@@ -17,9 +17,12 @@ func TestClassify(t *testing.T) {
 		{"ftp://example.com/file.zip", model.SourceFTP},
 		{"sftp://example.com/file.zip", model.SourceSFTP},
 		{"magnet:?xt=urn:btih:0123456789abcdef", model.SourceMagnet},
+		{"https://www.youtube.com/watch?v=dQw4w9WgXcQ", model.SourceMedia},
+		{"https://youtu.be/dQw4w9WgXcQ", model.SourceMedia},
+		{"https://music.youtube.com/watch?v=dQw4w9WgXcQ", model.SourceMedia},
 	}
 	for _, tt := range tests {
-		t.Run(string(tt.want), func(t *testing.T) {
+		t.Run(string(tt.want)+tt.url, func(t *testing.T) {
 			got, err := Classify(tt.url)
 			if err != nil {
 				t.Fatalf("Classify(%q): %v", tt.url, err)
@@ -46,8 +49,12 @@ func TestResolveEngine(t *testing.T) {
 	}{
 		{"", model.SourceDirect, model.EngineNative, false},
 		{model.EngineAuto, model.SourceMagnet, model.EngineAria2, false},
+		{model.EngineAuto, model.SourceMedia, model.EngineMedia, false},
 		{model.EngineAria2, model.SourceDirect, model.EngineAria2, false},
 		{model.EngineNative, model.SourceFTP, "", true},
+		{model.EngineAria2, model.SourceMedia, "", true},
+		{model.EngineMedia, model.SourceDirect, "", true},
+		{model.EngineMedia, model.SourceMedia, model.EngineMedia, false},
 	}
 	for _, tt := range tests {
 		got, err := ResolveEngine(tt.requested, tt.kind)
@@ -71,4 +78,56 @@ func TestDisplayNameMagnet(t *testing.T) {
 	if got != "Example Release" {
 		t.Fatalf("DisplayName magnet=%q", got)
 	}
+}
+
+func TestParseMediaProgress(t *testing.T) {
+	p, ok := parseMediaProgress("BOLTDM_PROGRESS:1048576|2097152|0|524288")
+	if !ok {
+		t.Fatal("expected progress line")
+	}
+	if p.Downloaded != 1048576 || p.Total != 2097152 || p.Speed != 524288 {
+		t.Fatalf("unexpected progress: %+v", p)
+	}
+
+	p, ok = parseMediaProgress("BOLTDM_PROGRESS:100|NA|250|NA")
+	if !ok || p.Downloaded != 100 || p.Total != 250 || p.Speed != 0 {
+		t.Fatalf("estimated progress parse failed: %+v, ok=%v", p, ok)
+	}
+}
+
+func TestMediaArgsChooseSafeFallbackWithoutFFmpeg(t *testing.T) {
+	e := &MediaEngine{ytdlp: "yt-dlp"}
+	args := e.args(model.Task{URL: "https://youtu.be/test", Filename: "media-download"}, t.TempDir())
+	if !containsPair(args, "-f", "b") {
+		t.Fatalf("expected single-file fallback format, args=%v", args)
+	}
+	if containsArg(args, "--ffmpeg-location") {
+		t.Fatalf("unexpected ffmpeg argument, args=%v", args)
+	}
+}
+
+func TestMediaArgsUseMergedBestWithFFmpeg(t *testing.T) {
+	e := &MediaEngine{ytdlp: "yt-dlp", ffmpeg: "ffmpeg"}
+	args := e.args(model.Task{URL: "https://youtu.be/test", Filename: "media-download"}, t.TempDir())
+	if !containsPair(args, "-f", "bv*+ba/b") || !containsArg(args, "--ffmpeg-location") {
+		t.Fatalf("expected merged best format, args=%v", args)
+	}
+}
+
+func containsArg(args []string, want string) bool {
+	for _, arg := range args {
+		if arg == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsPair(args []string, key, value string) bool {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == key && args[i+1] == value {
+			return true
+		}
+	}
+	return false
 }
