@@ -19,6 +19,7 @@ const (
 	EngineAuto   EngineName = "auto"
 	EngineNative EngineName = "native"
 	EngineAria2  EngineName = "aria2"
+	EngineMedia  EngineName = "media"
 )
 
 type SourceKind string
@@ -30,6 +31,7 @@ const (
 	SourceMagnet   SourceKind = "magnet"
 	SourceTorrent  SourceKind = "torrent"
 	SourceMetalink SourceKind = "metalink"
+	SourceMedia    SourceKind = "media"
 )
 
 type ChecksumSpec struct {
