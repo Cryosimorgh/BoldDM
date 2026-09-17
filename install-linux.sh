@@ -37,6 +37,9 @@ else
 fi
 
 install -m 0755 "$BINARY" "$BIN_DIR/boltdm"
+if [[ -f "$ROOT/yt-dlp" ]]; then
+  install -m 0755 "$ROOT/yt-dlp" "$BIN_DIR/yt-dlp"
+fi
 
 ICON_SOURCE=""
 for candidate in "$ROOT/boltdm.svg" "$ROOT/packaging/linux/boltdm.svg"; do
@@ -74,6 +77,12 @@ if ! command -v xdg-open >/dev/null 2>&1; then
 fi
 if ! command -v aria2c >/dev/null 2>&1; then
   echo "Note: aria2c is optional but required for FTP, SFTP, torrent, magnet and Metalink transfers." >&2
+fi
+if [[ ! -x "$BIN_DIR/yt-dlp" ]] && ! command -v yt-dlp >/dev/null 2>&1; then
+  echo "Note: yt-dlp is required for YouTube/media page downloads." >&2
+fi
+if ! command -v ffmpeg >/dev/null 2>&1; then
+  echo "Note: FFmpeg is optional. Without it, media downloads use the best available single-file video instead of merging separate best-quality video/audio streams." >&2
 fi
 if ! command -v zenity >/dev/null 2>&1; then
   echo "Note: install zenity for the native folder picker; manual paths still work." >&2
