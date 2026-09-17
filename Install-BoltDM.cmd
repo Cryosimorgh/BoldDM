@@ -11,6 +11,8 @@ if not exist "%DEST%" mkdir "%DEST%"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -LiteralPath '%SRC%' -File -ErrorAction SilentlyContinue ^| Unblock-File -ErrorAction SilentlyContinue"
 copy /Y "%SRC%BoltDM.exe" "%DEST%\BoltDM.exe" >nul || goto :fail
 if exist "%SRC%BoltDM.ico" copy /Y "%SRC%BoltDM.ico" "%DEST%\BoltDM.ico" >nul || goto :fail
+if exist "%SRC%yt-dlp.exe" copy /Y "%SRC%yt-dlp.exe" "%DEST%\yt-dlp.exe" >nul || goto :fail
+if exist "%SRC%ffmpeg.exe" copy /Y "%SRC%ffmpeg.exe" "%DEST%\ffmpeg.exe" >nul || goto :fail
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$ws=New-Object -ComObject WScript.Shell; $p=Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\BoltDM.lnk'; $s=$ws.CreateShortcut($p); $s.TargetPath=Join-Path $env:LOCALAPPDATA 'Programs\BoltDM\BoltDM.exe'; $s.WorkingDirectory=Join-Path $env:LOCALAPPDATA 'Programs\BoltDM'; $ico=Join-Path $env:LOCALAPPDATA 'Programs\BoltDM\BoltDM.ico'; if (Test-Path $ico) { $s.IconLocation=$ico }; $s.Save()"
 
