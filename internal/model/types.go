@@ -32,6 +32,11 @@ const (
 	SourceMetalink SourceKind = "metalink"
 )
 
+type ChecksumSpec struct {
+	Algorithm string `json:"algorithm"`
+	Digest    string `json:"digest"`
+}
+
 type Request struct {
 	URL         string            `json:"url"`
 	Filename    string            `json:"filename,omitempty"`
@@ -40,6 +45,8 @@ type Request struct {
 	Segments    int               `json:"segments,omitempty"`
 	Connections int               `json:"connections,omitempty"`
 	Engine      EngineName        `json:"engine,omitempty"`
+	StartAt     *time.Time        `json:"startAt,omitempty"`
+	Checksum    *ChecksumSpec     `json:"checksum,omitempty"`
 }
 
 type BatchRequest struct {
@@ -75,9 +82,12 @@ type Task struct {
 	SegmentSetting         int               `json:"segmentSetting,omitempty"`
 	ConnectionSetting      int               `json:"connectionSetting,omitempty"`
 	Files                  []TaskFile        `json:"files,omitempty"`
-	Error                  string            `json:"error,omitempty"`
-	CreatedAt              time.Time         `json:"createdAt"`
-	UpdatedAt              time.Time         `json:"updatedAt"`
+	StartAt                *time.Time         `json:"startAt,omitempty"`
+	Checksum               *ChecksumSpec      `json:"checksum,omitempty"`
+	ChecksumVerified       bool               `json:"checksumVerified,omitempty"`
+	Error                  string             `json:"error,omitempty"`
+	CreatedAt              time.Time          `json:"createdAt"`
+	UpdatedAt              time.Time          `json:"updatedAt"`
 }
 
 type SegmentProgress struct {
