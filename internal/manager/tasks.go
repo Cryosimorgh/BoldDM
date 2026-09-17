@@ -113,7 +113,7 @@ func (m *Manager) Pause(id string) error {
 	if rt.Task.State == model.StateDownloading && rt.cancel != nil {
 		rt.cancel()
 	}
-	if rt.Task.State == model.StateQueued || rt.Task.State == model.StateDownloading || rt.Task.State == model.StateFailed {
+	if rt.Task.State == model.StateQueued || rt.Task.State == model.StateDownloading {
 		rt.Task.State = model.StatePaused
 		rt.Task.Error = ""
 		rt.Task.SpeedBytesPerSec = 0
@@ -130,7 +130,7 @@ func (m *Manager) Resume(id string) error {
 	if rt == nil {
 		return os.ErrNotExist
 	}
-	if rt.Task.State == model.StatePaused || rt.Task.State == model.StateFailed || rt.Task.State == model.StateCanceled {
+	if rt.Task.State == model.StatePaused || rt.Task.State == model.StateCanceled {
 		rt.Task.State = model.StateQueued
 		rt.Task.Error = ""
 		rt.Task.UpdatedAt = time.Now()
@@ -140,24 +140,62 @@ func (m *Manager) Resume(id string) error {
 	return nil
 }
 
-func (m *Manager) Cancel(id string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (m *Manager) Retry(id string) error {
+	m.mu.RLock()
 	rt := m.tasks[id]
 	if rt == nil {
+		m.mu.RUnlock()
 		return os.ErrNotExist
 	}
-	if rt.cancel != nil {
-		rt.cancel()
+	task := rt.Task
+	engine := m.engines[task.Engine]
+	m.mu.RUnlock()
+	if task.State != model.StateFailed {
+		return m.Resume(id)
 	}
-	rt.Task.State = model.StateCanceled
-	rt.Task.SpeedBytesPerSec = 0
-	rt.Task.UploadSpeedBytesPerSec = 0
-	rt.Task.UpdatedAt = time.Now()
-	return m.saveLocked()
-}
 
-func (m *Manager) Retry(id string) error { return m.Resume(id) }
+	if task.Checksum != nil && strings.Contains(strings.ToLower(task.Error), "checksum mismatch") {
+		if engine != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+			err := engine.Remove(ctx, task)
+			cancel()
+			if err != nil {
+				return fmt.Errorf("reset failed checksum transfer: %w", err)
+			}
+		}
+		if path := checksumPath(task); path != "" {
+			if task.OutputRoot == "" || withinRoot(filepath.Clean(task.OutputRoot), filepath.Clean(path)) {
+				_ = os.Remove(path)
+			}
+		}
+		if task.Engine == model.EngineNative || task.Engine == "" {
+			_ = os.Remove(task.OutputPath + ".part")
+			_ = os.Remove(task.OutputPath + ".part.json")
+		}
+	}
+
+	m.mu.Lock()
+	rt = m.tasks[id]
+	if rt == nil {
+		m.mu.Unlock()
+		return os.ErrNotExist
+	}
+	if rt.Task.State == model.StateFailed {
+		rt.Task.State = model.StateQueued
+		rt.Task.Error = ""
+		rt.Task.ChecksumVerified = false
+		rt.Task.Downloaded = 0
+		rt.Task.Uploaded = 0
+		rt.Task.SpeedBytesPerSec = 0
+		rt.Task.UploadSpeedBytesPerSec = 0
+		rt.Task.Progress = 0
+		rt.Task.UpdatedAt = time.Now()
+		_ = m.saveLocked()
+	}
+	m.mu.Unlock()
+	m.signal()
+	return nil
+}
 
 func (m *Manager) PauseAll() int {
 	m.mu.Lock()
@@ -199,21 +237,19 @@ func (m *Manager) ResumeAll() int {
 }
 
 func (m *Manager) RetryFailed() int {
-	m.mu.Lock()
-	count := 0
-	for _, rt := range m.tasks {
+	m.mu.RLock()
+	ids := make([]string, 0)
+	for id, rt := range m.tasks {
 		if rt.Task.State == model.StateFailed {
-			rt.Task.State = model.StateQueued
-			rt.Task.Error = ""
-			rt.Task.ChecksumVerified = false
-			rt.Task.UpdatedAt = time.Now()
-			count++
+			ids = append(ids, id)
 		}
 	}
-	_ = m.saveLocked()
-	m.mu.Unlock()
-	if count > 0 {
-		m.signal()
+	m.mu.RUnlock()
+	count := 0
+	for _, id := range ids {
+		if err := m.Retry(id); err == nil {
+			count++
+		}
 	}
 	return count
 }
