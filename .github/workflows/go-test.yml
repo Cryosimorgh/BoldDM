@@ -37,3 +37,6 @@ jobs:
           node --check extension/content.js
           node --check extension/popup.js
           node --check extension/service_worker.js
+      - name: Linux packaging script syntax
+        if: runner.os == 'Linux'
+        run: bash -n build.sh install-linux.sh
