@@ -240,11 +240,12 @@ func (m *Manager) Close() {
 		m.mu.Unlock()
 		<-m.done
 		deadline := time.After(5 * time.Second)
+	waitRuns:
 		for _, done := range dones {
 			select {
 			case <-done:
 			case <-deadline:
-				break
+				break waitRuns
 			}
 		}
 		_ = m.save()
