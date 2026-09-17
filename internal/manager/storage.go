@@ -31,7 +31,15 @@ func (m *Manager) MoveTask(id, destination string) (model.Task, error) {
 		m.mu.Unlock()
 		return model.Task{}, os.ErrNotExist
 	}
-	if filepath.Clean(destination) == filepath.Clean(filepath.Dir(rt.Task.OutputPath)) {
+	if rt.Task.Engine != model.EngineNative && rt.Task.Engine != "" {
+		m.mu.Unlock()
+		return model.Task{}, fmt.Errorf("moving %s engine tasks is not supported yet; pause/remove and re-add the transfer in the new location", rt.Task.Engine)
+	}
+	currentRoot := rt.Task.OutputRoot
+	if currentRoot == "" {
+		currentRoot = filepath.Dir(rt.Task.OutputPath)
+	}
+	if filepath.Clean(destination) == filepath.Clean(currentRoot) {
 		out := rt.Task
 		m.mu.Unlock()
 		return out, nil
@@ -96,6 +104,7 @@ func (m *Manager) MoveTask(id, destination string) (model.Task, error) {
 	}
 	rt.Task.Filename = name
 	rt.Task.OutputPath = newOutput
+	rt.Task.OutputRoot = destination
 	rt.Task.UpdatedAt = time.Now()
 	if oldState == model.StateDownloading || oldState == model.StateQueued {
 		rt.Task.State = model.StateQueued
