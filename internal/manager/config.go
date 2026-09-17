@@ -8,9 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
+	"boltdm/internal/aria2rpc"
 	"boltdm/internal/downloader"
 	"boltdm/internal/model"
+	"boltdm/internal/transfer"
 )
 
 type AppearanceConfig struct {
@@ -28,6 +31,13 @@ type AppearanceConfig struct {
 	CustomCSS       string `json:"customCSS"`
 }
 
+type Aria2Config struct {
+	Mode       string `json:"mode"`
+	Executable string `json:"executable,omitempty"`
+	RPCURL     string `json:"rpcUrl,omitempty"`
+	RPCSecret  string `json:"rpcSecret,omitempty"`
+}
+
 type Config struct {
 	DownloadDir           string           `json:"downloadDir"`
 	MaxActive             int              `json:"maxActive"`
@@ -39,6 +49,15 @@ type Config struct {
 	SpeedLimitBytesPerSec int64            `json:"speedLimitBytesPerSec"`
 	LaunchMode            string           `json:"launchMode"`
 	Appearance            AppearanceConfig `json:"appearance"`
+	Aria2                 Aria2Config      `json:"aria2"`
+}
+
+type EngineInfo struct {
+	Available bool     `json:"available"`
+	Managed   bool     `json:"managed,omitempty"`
+	Version   string   `json:"version,omitempty"`
+	Features  []string `json:"features,omitempty"`
+	Error     string   `json:"error,omitempty"`
 }
 
 type runtimeTask struct {
@@ -48,15 +67,18 @@ type runtimeTask struct {
 }
 
 type Manager struct {
-	mu        sync.RWMutex
-	tasks     map[string]*runtimeTask
-	config    Config
-	stateDir  string
-	dl        *downloader.Downloader
-	wake      chan struct{}
-	closed    chan struct{}
-	done      chan struct{}
-	closeOnce sync.Once
+	mu           sync.RWMutex
+	tasks        map[string]*runtimeTask
+	config       Config
+	stateDir     string
+	native       *transfer.NativeEngine
+	engines      map[model.EngineName]transfer.Engine
+	aria2Service *aria2rpc.Service
+	aria2Error   string
+	wake         chan struct{}
+	closed       chan struct{}
+	done         chan struct{}
+	closeOnce    sync.Once
 }
 
 func New(config Config, stateDir string) (*Manager, error) {
@@ -69,15 +91,37 @@ func New(config Config, stateDir string) (*Manager, error) {
 	}
 	dl := downloader.New(downloader.Options{Segments: config.SegmentsPerFile, Connections: config.ConnectionsPerFile, MinSegmentSize: config.MinSegmentSizeBytes, Retries: config.Retries})
 	dl.SetSpeedLimit(config.SpeedLimitBytesPerSec)
+	native := transfer.NewNativeEngine(dl)
 	m := &Manager{
 		tasks: make(map[string]*runtimeTask), config: config, stateDir: stateDir,
-		dl: dl, wake: make(chan struct{}, 1), closed: make(chan struct{}), done: make(chan struct{}),
+		native: native, engines: map[model.EngineName]transfer.Engine{model.EngineNative: native},
+		wake: make(chan struct{}, 1), closed: make(chan struct{}), done: make(chan struct{}),
 	}
+	m.openAria2()
 	_ = m.load()
 	_ = m.saveConfig()
 	go m.scheduler()
 	m.signal()
 	return m, nil
+}
+
+func (m *Manager) openAria2() {
+	if m.config.Aria2.Mode == "off" {
+		m.aria2Error = "aria2 integration is disabled"
+		return
+	}
+	svc, err := aria2rpc.OpenService(aria2rpc.ServiceConfig{
+		Mode: m.config.Aria2.Mode, Executable: m.config.Aria2.Executable,
+		RPCURL: m.config.Aria2.RPCURL, RPCSecret: m.config.Aria2.RPCSecret,
+		StateDir: filepath.Join(m.stateDir, "aria2"),
+	})
+	if err != nil {
+		m.aria2Error = err.Error()
+		return
+	}
+	m.aria2Service = svc
+	m.engines[model.EngineAria2] = transfer.NewAria2Engine(svc.Client())
+	m.aria2Error = ""
 }
 
 func normalizeConfig(config Config) Config {
@@ -172,6 +216,11 @@ func normalizeConfig(config Config) Config {
 	if config.SpeedLimitBytesPerSec < 0 {
 		config.SpeedLimitBytesPerSec = 0
 	}
+	mode := strings.ToLower(strings.TrimSpace(config.Aria2.Mode))
+	if mode != "off" && mode != "external" {
+		mode = "auto"
+	}
+	config.Aria2.Mode = mode
 	return config
 }
 
@@ -179,15 +228,30 @@ func (m *Manager) Close() {
 	m.closeOnce.Do(func() {
 		close(m.closed)
 		m.mu.Lock()
+		dones := make([]chan struct{}, 0)
 		for _, t := range m.tasks {
 			if t.cancel != nil {
 				t.cancel()
 			}
+			if t.runDone != nil {
+				dones = append(dones, t.runDone)
+			}
 		}
 		m.mu.Unlock()
 		<-m.done
+		deadline := time.After(5 * time.Second)
+		for _, done := range dones {
+			select {
+			case <-done:
+			case <-deadline:
+				break
+			}
+		}
 		_ = m.save()
 		_ = m.saveConfig()
+		if m.aria2Service != nil {
+			_ = m.aria2Service.Close()
+		}
 	})
 }
 
@@ -195,6 +259,23 @@ func (m *Manager) Config() Config {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.config
+}
+
+func (m *Manager) EngineStatus() map[string]EngineInfo {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := map[string]EngineInfo{
+		string(model.EngineNative): {Available: true, Version: "builtin", Features: []string{"http", "https", "segmented-resume"}},
+	}
+	aria := EngineInfo{Available: m.aria2Service != nil, Error: m.aria2Error}
+	if m.aria2Service != nil {
+		v := m.aria2Service.Version()
+		aria.Managed = m.aria2Service.Managed()
+		aria.Version = v.Version
+		aria.Features = append([]string(nil), v.EnabledFeatures...)
+	}
+	out[string(model.EngineAria2)] = aria
+	return out
 }
 
 func (m *Manager) UpdateConfig(config Config) (Config, error) {
@@ -207,11 +288,12 @@ func (m *Manager) UpdateConfig(config Config) (Config, error) {
 	}
 	m.mu.Lock()
 	m.config = config
-	m.dl.SetSegments(config.SegmentsPerFile)
-	m.dl.SetConnections(config.ConnectionsPerFile)
-	m.dl.SetMinSegmentSize(config.MinSegmentSizeBytes)
-	m.dl.SetRetries(config.Retries)
-	m.dl.SetSpeedLimit(config.SpeedLimitBytesPerSec)
+	dl := m.native.Downloader()
+	dl.SetSegments(config.SegmentsPerFile)
+	dl.SetConnections(config.ConnectionsPerFile)
+	dl.SetMinSegmentSize(config.MinSegmentSizeBytes)
+	dl.SetRetries(config.Retries)
+	dl.SetSpeedLimit(config.SpeedLimitBytesPerSec)
 	err := m.saveConfigLocked()
 	m.mu.Unlock()
 	m.signal()
