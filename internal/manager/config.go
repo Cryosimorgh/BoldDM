@@ -38,6 +38,11 @@ type Aria2Config struct {
 	RPCSecret  string `json:"rpcSecret,omitempty"`
 }
 
+type MediaConfig struct {
+	YTDLPExecutable  string `json:"ytDlpExecutable,omitempty"`
+	FFmpegExecutable string `json:"ffmpegExecutable,omitempty"`
+}
+
 type Config struct {
 	DownloadDir           string           `json:"downloadDir"`
 	MaxActive             int              `json:"maxActive"`
@@ -50,6 +55,7 @@ type Config struct {
 	LaunchMode            string           `json:"launchMode"`
 	Appearance            AppearanceConfig `json:"appearance"`
 	Aria2                 Aria2Config      `json:"aria2"`
+	Media                 MediaConfig      `json:"media"`
 }
 
 type EngineInfo struct {
@@ -75,6 +81,8 @@ type Manager struct {
 	engines      map[model.EngineName]transfer.Engine
 	aria2Service *aria2rpc.Service
 	aria2Error   string
+	media        *transfer.MediaEngine
+	mediaError   string
 	wake         chan struct{}
 	closed       chan struct{}
 	done         chan struct{}
@@ -98,6 +106,7 @@ func New(config Config, stateDir string) (*Manager, error) {
 		wake: make(chan struct{}, 1), closed: make(chan struct{}), done: make(chan struct{}),
 	}
 	m.openAria2()
+	m.openMedia()
 	_ = m.load()
 	_ = m.saveConfig()
 	go m.scheduler()
@@ -122,6 +131,17 @@ func (m *Manager) openAria2() {
 	m.aria2Service = svc
 	m.engines[model.EngineAria2] = transfer.NewAria2Engine(svc.Client())
 	m.aria2Error = ""
+}
+
+func (m *Manager) openMedia() {
+	engine, err := transfer.NewMediaEngine(m.config.Media.YTDLPExecutable, m.config.Media.FFmpegExecutable)
+	if err != nil {
+		m.mediaError = err.Error()
+		return
+	}
+	m.media = engine
+	m.engines[model.EngineMedia] = engine
+	m.mediaError = ""
 }
 
 func normalizeConfig(config Config) Config {
@@ -276,6 +296,16 @@ func (m *Manager) EngineStatus() map[string]EngineInfo {
 		aria.Features = append([]string(nil), v.EnabledFeatures...)
 	}
 	out[string(model.EngineAria2)] = aria
+	media := EngineInfo{Available: m.media != nil, Error: m.mediaError, Features: []string{"youtube", "resume"}}
+	if m.media != nil {
+		media.Version = m.media.Version()
+		if m.media.HasFFmpeg() {
+			media.Features = append(media.Features, "ffmpeg-merge", "best-video+audio")
+		} else {
+			media.Features = append(media.Features, "single-file-fallback")
+		}
+	}
+	out[string(model.EngineMedia)] = media
 	return out
 }
 
