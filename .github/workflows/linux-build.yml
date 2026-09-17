@@ -1,0 +1,55 @@
+name: Linux build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  linux-amd64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+      - name: Build Linux package
+        shell: bash
+        run: |
+          chmod +x build.sh install-linux.sh
+          BOLTDM_TARGET_OS=linux BOLTDM_TARGET_ARCH=amd64 ./build.sh
+      - name: Upload Linux package
+        uses: actions/upload-artifact@v4
+        with:
+          name: BoltDM-linux-amd64
+          path: |
+            dist/BoltDM-linux-amd64.tar.gz
+            dist/BoltDM-linux-amd64.tar.gz.sha256
+          if-no-files-found: error
+
+  linux-arm64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+      - name: Build Linux package
+        shell: bash
+        run: |
+          chmod +x build.sh install-linux.sh
+          BOLTDM_TARGET_OS=linux BOLTDM_TARGET_ARCH=arm64 ./build.sh
+      - name: Upload Linux package
+        uses: actions/upload-artifact@v4
+        with:
+          name: BoltDM-linux-arm64
+          path: |
+            dist/BoltDM-linux-arm64.tar.gz
+            dist/BoltDM-linux-arm64.tar.gz.sha256
+          if-no-files-found: error
