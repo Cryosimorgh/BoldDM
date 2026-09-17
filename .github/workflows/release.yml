@@ -141,7 +141,8 @@ jobs:
           BOLTDM_TARGET_ARCH=${{ matrix.arch }} \
           ./build.sh
 
-          tar -tzf "dist/BoltDM-linux-${{ matrix.arch }}.tar.gz" | grep -q '/yt-dlp$'
+          tar -tzf "dist/BoltDM-linux-${{ matrix.arch }}.tar.gz" > "/tmp/boltdm-linux-${{ matrix.arch }}.contents"
+          grep -q '/yt-dlp$' "/tmp/boltdm-linux-${{ matrix.arch }}.contents"
 
       - uses: actions/upload-artifact@v4
         with:
