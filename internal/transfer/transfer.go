@@ -62,6 +62,9 @@ func Classify(raw string) (model.SourceKind, error) {
 	scheme := strings.ToLower(u.Scheme)
 	switch scheme {
 	case "http", "https":
+		if isSupportedMediaHost(u.Hostname()) {
+			return model.SourceMedia, nil
+		}
 		ext := strings.ToLower(filepath.Ext(u.Path))
 		switch ext {
 		case ".torrent":
@@ -82,12 +85,21 @@ func Classify(raw string) (model.SourceKind, error) {
 	}
 }
 
+func isSupportedMediaHost(host string) bool {
+	host = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
+	return host == "youtu.be" || host == "youtube.com" || strings.HasSuffix(host, ".youtube.com")
+}
+
 func ResolveEngine(requested model.EngineName, kind model.SourceKind) (model.EngineName, error) {
 	if requested == "" || requested == model.EngineAuto {
-		if kind == model.SourceDirect {
+		switch kind {
+		case model.SourceDirect:
 			return model.EngineNative, nil
+		case model.SourceMedia:
+			return model.EngineMedia, nil
+		default:
+			return model.EngineAria2, nil
 		}
-		return model.EngineAria2, nil
 	}
 	switch requested {
 	case model.EngineNative:
@@ -96,7 +108,15 @@ func ResolveEngine(requested model.EngineName, kind model.SourceKind) (model.Eng
 		}
 		return model.EngineNative, nil
 	case model.EngineAria2:
+		if kind == model.SourceMedia {
+			return "", errors.New("aria2 cannot extract media from a web page; use the media engine")
+		}
 		return model.EngineAria2, nil
+	case model.EngineMedia:
+		if kind != model.SourceMedia {
+			return "", fmt.Errorf("media engine does not support %s sources", kind)
+		}
+		return model.EngineMedia, nil
 	default:
 		return "", fmt.Errorf("unknown transfer engine %q", requested)
 	}
@@ -105,6 +125,9 @@ func ResolveEngine(requested model.EngineName, kind model.SourceKind) (model.Eng
 func DisplayName(raw string, kind model.SourceKind) string {
 	u, err := url.Parse(raw)
 	if err == nil {
+		if kind == model.SourceMedia {
+			return "media-download"
+		}
 		if kind == model.SourceMagnet {
 			if dn := strings.TrimSpace(u.Query().Get("dn")); dn != "" {
 				return sanitizeDisplayName(dn)
