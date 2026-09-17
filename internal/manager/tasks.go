@@ -250,17 +250,30 @@ func (m *Manager) CancelAll() int {
 }
 
 func (m *Manager) ClearCompleted() int {
+	type cleanup struct {
+		task   model.Task
+		engine transfer.Engine
+	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	count := 0
+	items := make([]cleanup, 0)
 	for id, rt := range m.tasks {
 		if rt.Task.State == model.StateCompleted {
+			items = append(items, cleanup{task: rt.Task, engine: m.engines[rt.Task.Engine]})
 			delete(m.tasks, id)
-			count++
 		}
 	}
 	_ = m.saveLocked()
-	return count
+	m.mu.Unlock()
+
+	for _, item := range items {
+		if item.engine == nil {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		_ = item.engine.Remove(ctx, item.task)
+		cancel()
+	}
+	return len(items)
 }
 
 func (m *Manager) Remove(id string, deleteFiles bool) error {
@@ -312,6 +325,9 @@ func removeTaskData(task model.Task) {
 		_ = os.Remove(task.OutputPath)
 		_ = os.Remove(task.OutputPath + ".part")
 		_ = os.Remove(task.OutputPath + ".part.json")
+		return
+	}
+	if strings.TrimSpace(task.OutputRoot) == "" {
 		return
 	}
 	root := filepath.Clean(task.OutputRoot)
