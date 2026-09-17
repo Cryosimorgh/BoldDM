@@ -167,10 +167,20 @@ func (c *Client) Unpause(ctx context.Context, gid string) error {
 }
 
 func (c *Client) Remove(ctx context.Context, gid string) error {
-	var ignored string
-	if err := c.call(ctx, "aria2.forceRemove", []any{gid}, &ignored); err != nil && !IsNotFound(err) {
+	status, err := c.TellStatus(ctx, gid)
+	if err != nil {
+		if IsNotFound(err) {
+			return nil
+		}
 		return err
 	}
+	if status.Status == "active" || status.Status == "waiting" || status.Status == "paused" {
+		var ignored string
+		if err := c.call(ctx, "aria2.forceRemove", []any{gid}, &ignored); err != nil && !IsNotFound(err) {
+			return err
+		}
+	}
+	var ignored string
 	if err := c.call(ctx, "aria2.removeDownloadResult", []any{gid}, &ignored); err != nil && !IsNotFound(err) {
 		return err
 	}
