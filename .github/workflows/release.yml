@@ -168,16 +168,23 @@ jobs:
         shell: bash
         working-directory: release-assets
         run: |
-          sha256sum --check BoltDM-linux-amd64.tar.gz.sha256
-          sha256sum --check BoltDM-linux-arm64.tar.gz.sha256
+          set -euo pipefail
+
+          for arch in amd64 arm64; do
+            archive="BoltDM-linux-${arch}.tar.gz"
+            checksum="${archive}.sha256"
+            expected="$(awk '{print $1}' "$checksum")"
+            actual="$(sha256sum "$archive" | awk '{print $1}')"
+            test "$expected" = "$actual"
+          done
 
       - name: Verify Windows hash
         shell: bash
         working-directory: release-assets
         run: |
-          expected="$(cut -d' ' -f1 BoltDM-windows-amd64.zip.sha256)"
-          actual="$(sha256sum BoltDM-windows-amd64.zip | cut -d' ' -f1)"
-
+          set -euo pipefail
+          expected="$(awk '{print $1}' BoltDM-windows-amd64.zip.sha256)"
+          actual="$(sha256sum BoltDM-windows-amd64.zip | awk '{print $1}')"
           test "$expected" = "$actual"
 
       - name: Create GitHub release
