@@ -10,17 +10,25 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: '1.23.x'
-          cache: true
+          cache: false
       - name: Go test
         run: go test ./...
       - name: Go vet
         run: go vet ./...
+      - name: Build application
+        run: go build ./cmd/boltdm
+      - name: Build updater
+        run: go build ./cmd/updater
       - name: JavaScript syntax
         run: |
           node --check internal/server/web/core.js
