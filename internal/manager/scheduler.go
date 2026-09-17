@@ -88,6 +88,14 @@ func (m *Manager) run(ctx context.Context, id string) {
 		return
 	}
 	task := rt.Task
+	if task.Engine == model.EngineAria2 {
+		if task.SegmentSetting <= 0 {
+			task.SegmentSetting = m.config.SegmentsPerFile
+		}
+		if task.ConnectionSetting <= 0 {
+			task.ConnectionSetting = m.config.ConnectionsPerFile
+		}
+	}
 	engine := m.engines[task.Engine]
 	m.mu.RUnlock()
 
