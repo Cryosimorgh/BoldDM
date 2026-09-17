@@ -33,6 +33,7 @@ func New(addr string, mgr *manager.Manager) *Server {
 	s := &Server{mgr: mgr, shutdown: make(chan struct{}, 1)}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/health", s.handleHealth)
+	mux.HandleFunc("/api/v1/engines", s.auth(s.handleEngines))
 	mux.HandleFunc("/api/v1/downloads", s.auth(s.handleDownloads))
 	mux.HandleFunc("/api/v1/tasks", s.auth(s.handleTasks))
 	mux.HandleFunc("/api/v1/tasks/", s.auth(s.handleTaskAction))
@@ -62,7 +63,15 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, map[string]any{"ok": true, "name": "BoltDM", "version": "1.1.0"})
+	writeJSON(w, 200, map[string]any{"ok": true, "name": "BoltDM", "version": "1.2.0", "engines": s.mgr.EngineStatus()})
+}
+
+func (s *Server) handleEngines(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, 405, map[string]any{"error": "GET required"})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"engines": s.mgr.EngineStatus()})
 }
 
 func (s *Server) handleDownloads(w http.ResponseWriter, r *http.Request) {
@@ -96,7 +105,7 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 405, map[string]any{"error": "GET required"})
 		return
 	}
-	writeJSON(w, 200, map[string]any{"tasks": s.mgr.List(), "config": s.mgr.Config()})
+	writeJSON(w, 200, map[string]any{"tasks": s.mgr.List(), "config": s.mgr.Config(), "engines": s.mgr.EngineStatus()})
 }
 
 func (s *Server) handleTaskAction(w http.ResponseWriter, r *http.Request) {
@@ -200,7 +209,7 @@ func (s *Server) handleBulkAction(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, 200, map[string]any{"config": s.mgr.Config()})
+		writeJSON(w, 200, map[string]any{"config": s.mgr.Config(), "engines": s.mgr.EngineStatus()})
 	case http.MethodPost:
 		var cfg manager.Config
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&cfg); err != nil {
@@ -212,7 +221,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, 400, map[string]any{"error": err.Error()})
 			return
 		}
-		writeJSON(w, 200, map[string]any{"ok": true, "config": updated})
+		writeJSON(w, 200, map[string]any{"ok": true, "config": updated, "engines": s.mgr.EngineStatus()})
 	default:
 		writeJSON(w, 405, map[string]any{"error": "GET or POST required"})
 	}
@@ -338,6 +347,9 @@ func openDirectory(path string) error {
 }
 
 func revealPath(path string) error {
+	if info, err := os.Stat(path); err == nil && info.IsDir() {
+		return openDirectory(path)
+	}
 	if _, err := os.Stat(path); err != nil {
 		partial := path + ".part"
 		if _, partialErr := os.Stat(partial); partialErr == nil {
@@ -357,8 +369,12 @@ func revealPath(path string) error {
 }
 
 func openPath(path string) error {
-	if _, err := os.Stat(path); err != nil {
+	info, err := os.Stat(path)
+	if err != nil {
 		return err
+	}
+	if info.IsDir() {
+		return openDirectory(path)
 	}
 	switch runtime.GOOS {
 	case "windows":
