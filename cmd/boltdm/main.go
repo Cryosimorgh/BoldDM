@@ -43,6 +43,13 @@ func main() {
 	go func() {
 		log.Println("BoltDM running at http://127.0.0.1:17654")
 		log.Println("Downloads:", mgr.Config().DownloadDir)
+		for name, status := range mgr.EngineStatus() {
+			if status.Available {
+				log.Printf("Transfer engine %s available (version=%s managed=%v)", name, status.Version, status.Managed)
+			} else {
+				log.Printf("Transfer engine %s unavailable: %s", name, status.Error)
+			}
+		}
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Println("server:", err)
 			os.Exit(1)
@@ -104,6 +111,18 @@ func applyEnv(cfg *manager.Config) {
 	}
 	if v, err := strconv.Atoi(os.Getenv("BOLTDM_SEGMENTS")); err == nil && v > 0 {
 		cfg.SegmentsPerFile = v
+	}
+	if v := os.Getenv("BOLTDM_ARIA2_MODE"); v != "" {
+		cfg.Aria2.Mode = v
+	}
+	if v := os.Getenv("BOLTDM_ARIA2_EXECUTABLE"); v != "" {
+		cfg.Aria2.Executable = v
+	}
+	if v := os.Getenv("BOLTDM_ARIA2_RPC_URL"); v != "" {
+		cfg.Aria2.RPCURL = v
+	}
+	if v := os.Getenv("BOLTDM_ARIA2_RPC_SECRET"); v != "" {
+		cfg.Aria2.RPCSecret = v
 	}
 }
 func openBrowser(url string) error {
