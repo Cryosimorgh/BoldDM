@@ -68,7 +68,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path $PackageDir | Out-Null
 
           Copy-Item "dist\BoltDM.exe" "$PackageDir\BoltDM.exe"
-          Copy-Item "BoltDM.ico" "$PackageDir\BoltDM.ico"
+          if (Test-Path "BoltDM.ico") {
+            Copy-Item "BoltDM.ico" "$PackageDir\BoltDM.ico"
+          }
           Copy-Item "Install-BoltDM.cmd" "$PackageDir\Install-BoltDM.cmd"
 
           Compress-Archive `
