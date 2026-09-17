@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"boltdm/internal/model"
+	"boltdm/internal/transfer"
 )
 
 func (m *Manager) scheduler() {
@@ -41,7 +42,9 @@ func (m *Manager) startOne() bool {
 	for _, rt := range m.tasks {
 		if rt.Task.State == model.StateDownloading {
 			active++
-			perHost[hostOf(rt.Task.URL)]++
+			if h := hostOf(rt.Task.URL); h != "" {
+				perHost[h]++
+			}
 		}
 	}
 	if active >= m.config.MaxActive {
@@ -53,7 +56,7 @@ func (m *Manager) startOne() bool {
 		if rt.Task.State != model.StateQueued || rt.runDone != nil {
 			continue
 		}
-		if perHost[hostOf(rt.Task.URL)] >= m.config.MaxPerHost {
+		if h := hostOf(rt.Task.URL); h != "" && perHost[h] >= m.config.MaxPerHost {
 			continue
 		}
 		if pick == nil || rt.Task.CreatedAt.Before(pick.Task.CreatedAt) {
@@ -85,22 +88,41 @@ func (m *Manager) run(ctx context.Context, id string) {
 		return
 	}
 	task := rt.Task
+	engine := m.engines[task.Engine]
 	m.mu.RUnlock()
-	err := m.dl.Download(ctx, task, func(done, total, speed int64, segments, connections int) {
-		m.mu.Lock()
-		if cur := m.tasks[id]; cur != nil && cur.Task.State == model.StateDownloading {
-			cur.Task.Downloaded = done
-			cur.Task.Size = total
-			cur.Task.SpeedBytesPerSec = speed
-			cur.Task.Segments = segments
-			cur.Task.Connections = connections
-			if total > 0 {
-				cur.Task.Progress = float64(done) * 100 / float64(total)
+
+	var err error
+	if engine == nil {
+		err = fmt.Errorf("transfer engine %q is unavailable", task.Engine)
+	} else {
+		err = engine.Download(ctx, task, func(p transfer.Progress) {
+			m.mu.Lock()
+			if cur := m.tasks[id]; cur != nil && cur.Task.State == model.StateDownloading {
+				cur.Task.Downloaded = p.Downloaded
+				cur.Task.Size = p.Total
+				cur.Task.SpeedBytesPerSec = p.Speed
+				cur.Task.Uploaded = p.Uploaded
+				cur.Task.UploadSpeedBytesPerSec = p.UploadSpeed
+				cur.Task.Segments = p.Segments
+				cur.Task.Connections = p.Connections
+				if strings.TrimSpace(p.DisplayName) != "" {
+					cur.Task.Filename = safeFilename(p.DisplayName)
+				}
+				if strings.TrimSpace(p.OutputPath) != "" {
+					cur.Task.OutputPath = p.OutputPath
+				}
+				if p.Files != nil {
+					cur.Task.Files = append([]model.TaskFile(nil), p.Files...)
+				}
+				if p.Total > 0 {
+					cur.Task.Progress = float64(p.Downloaded) * 100 / float64(p.Total)
+				}
+				cur.Task.UpdatedAt = time.Now()
 			}
-			cur.Task.UpdatedAt = time.Now()
-		}
-		m.mu.Unlock()
-	})
+			m.mu.Unlock()
+		})
+	}
+
 	m.mu.Lock()
 	cur := m.tasks[id]
 	if cur == nil {
@@ -110,9 +132,10 @@ func (m *Manager) run(ctx context.Context, id string) {
 	cur.cancel = nil
 	if cur.runDone != nil {
 		close(cur.runDone)
-		cur.runDone = nil
 	}
+	cur.runDone = nil
 	cur.Task.SpeedBytesPerSec = 0
+	cur.Task.UploadSpeedBytesPerSec = 0
 	cur.Task.UpdatedAt = time.Now()
 	if err == nil {
 		cur.Task.State = model.StateCompleted
@@ -275,6 +298,24 @@ func (m *Manager) load() error {
 		if t.State == model.StateDownloading {
 			t.State = model.StateQueued
 			t.SpeedBytesPerSec = 0
+			t.UploadSpeedBytesPerSec = 0
+		}
+		if t.OutputRoot == "" {
+			t.OutputRoot = filepath.Dir(t.OutputPath)
+		}
+		if t.SourceKind == "" {
+			if kind, err := transfer.Classify(t.URL); err == nil {
+				t.SourceKind = kind
+			} else {
+				t.SourceKind = model.SourceDirect
+			}
+		}
+		if t.Engine == "" || t.Engine == model.EngineAuto {
+			if engine, err := transfer.ResolveEngine(model.EngineAuto, t.SourceKind); err == nil {
+				t.Engine = engine
+			} else {
+				t.Engine = model.EngineNative
+			}
 		}
 		tc := t
 		m.tasks[t.ID] = &runtimeTask{Task: tc}
