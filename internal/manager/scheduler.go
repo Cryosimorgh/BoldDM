@@ -52,8 +52,12 @@ func (m *Manager) startOne() bool {
 		return false
 	}
 	var pick *runtimeTask
+	now := time.Now()
 	for _, rt := range m.tasks {
 		if rt.Task.State != model.StateQueued || rt.runDone != nil {
+			continue
+		}
+		if rt.Task.StartAt != nil && rt.Task.StartAt.After(now) {
 			continue
 		}
 		if h := hostOf(rt.Task.URL); h != "" && perHost[h] >= m.config.MaxPerHost {
@@ -72,6 +76,7 @@ func (m *Manager) startOne() bool {
 	pick.runDone = make(chan struct{})
 	pick.Task.State = model.StateDownloading
 	pick.Task.Error = ""
+	pick.Task.ChecksumVerified = false
 	pick.Task.UpdatedAt = time.Now()
 	taskCopy := pick.Task
 	_ = m.saveLocked()
@@ -129,6 +134,28 @@ func (m *Manager) run(ctx context.Context, id string) {
 			}
 			m.mu.Unlock()
 		})
+	}
+
+	if err == nil && task.Checksum != nil {
+		m.mu.RLock()
+		latest := m.tasks[id]
+		if latest != nil {
+			task = latest.Task
+		}
+		m.mu.RUnlock()
+		if latest == nil {
+			return
+		}
+		if checksumErr := verifyTaskChecksum(task); checksumErr != nil {
+			err = checksumErr
+		} else {
+			m.mu.Lock()
+			if cur := m.tasks[id]; cur != nil {
+				cur.Task.ChecksumVerified = true
+				cur.Task.UpdatedAt = time.Now()
+			}
+			m.mu.Unlock()
+		}
 	}
 
 	m.mu.Lock()
