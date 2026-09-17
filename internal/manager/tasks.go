@@ -26,6 +26,15 @@ func (m *Manager) Add(req model.Request) (model.Task, error) {
 	if err != nil {
 		return model.Task{}, err
 	}
+	checksum, err := normalizeChecksum(req.Checksum)
+	if err != nil {
+		return model.Task{}, err
+	}
+	var startAt *time.Time
+	if req.StartAt != nil {
+		v := req.StartAt.UTC()
+		startAt = &v
+	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -61,7 +70,7 @@ func (m *Manager) Add(req model.Request) (model.Task, error) {
 		ID: newID(), URL: req.URL, Filename: name, OutputPath: filepath.Join(dir, name), OutputRoot: dir,
 		Headers: req.Headers, SourceKind: kind, Engine: engineName, State: model.StateQueued,
 		SegmentSetting: clamp(req.Segments, 0, 64), ConnectionSetting: clamp(req.Connections, 0, 32),
-		CreatedAt: now, UpdatedAt: now,
+		StartAt: startAt, Checksum: checksum, CreatedAt: now, UpdatedAt: now,
 	}
 	m.tasks[t.ID] = &runtimeTask{Task: t}
 	_ = m.saveLocked()
@@ -196,6 +205,7 @@ func (m *Manager) RetryFailed() int {
 		if rt.Task.State == model.StateFailed {
 			rt.Task.State = model.StateQueued
 			rt.Task.Error = ""
+			rt.Task.ChecksumVerified = false
 			rt.Task.UpdatedAt = time.Now()
 			count++
 		}
