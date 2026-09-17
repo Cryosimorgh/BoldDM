@@ -40,3 +40,13 @@ jobs:
       - name: Linux packaging script syntax
         if: runner.os == 'Linux'
         run: bash -n build.sh install-linux.sh
+      - name: Linux package smoke test
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          chmod +x build.sh install-linux.sh
+          BOLTDM_SKIP_CHECKS=1 BOLTDM_TARGET_OS=linux BOLTDM_TARGET_ARCH=amd64 ./build.sh
+          test -x dist/boltdm-linux-amd64/boltdm
+          test -x dist/boltdm-linux-amd64/boltdm-updater
+          test -f dist/BoltDM-linux-amd64.tar.gz
+          test -f dist/BoltDM-linux-amd64.tar.gz.sha256
