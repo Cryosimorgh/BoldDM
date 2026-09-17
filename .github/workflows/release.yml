@@ -60,18 +60,32 @@ jobs:
         run: |
           .\build.ps1
 
+      - name: Download official yt-dlp
+        shell: powershell
+        run: |
+          $PackageDir = "dist\BoltDM-windows-amd64"
+          New-Item -ItemType Directory -Force -Path $PackageDir | Out-Null
+          $YTDLP = "$PackageDir\yt-dlp.exe"
+          Invoke-WebRequest `
+            -Uri "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" `
+            -OutFile $YTDLP
+          & $YTDLP --version
+          if ($LASTEXITCODE -ne 0) { throw "Bundled yt-dlp failed its version check" }
+
       - name: Package Windows
         shell: powershell
         run: |
           $PackageDir = "dist\BoltDM-windows-amd64"
-
-          New-Item -ItemType Directory -Force -Path $PackageDir | Out-Null
 
           Copy-Item "dist\BoltDM.exe" "$PackageDir\BoltDM.exe"
           if (Test-Path "BoltDM.ico") {
             Copy-Item "BoltDM.ico" "$PackageDir\BoltDM.ico"
           }
           Copy-Item "Install-BoltDM.cmd" "$PackageDir\Install-BoltDM.cmd"
+
+          if (-not (Test-Path "$PackageDir\yt-dlp.exe")) {
+            throw "Bundled yt-dlp is missing"
+          }
 
           Compress-Archive `
             -Path "$PackageDir\*" `
@@ -122,9 +136,12 @@ jobs:
           chmod +x build.sh install-linux.sh
 
           BOLTDM_SKIP_CHECKS=1 \
+          BOLTDM_BUNDLE_YTDLP=1 \
           BOLTDM_TARGET_OS=linux \
           BOLTDM_TARGET_ARCH=${{ matrix.arch }} \
           ./build.sh
+
+          tar -tzf "dist/BoltDM-linux-${{ matrix.arch }}.tar.gz" | grep -q '/yt-dlp$'
 
       - uses: actions/upload-artifact@v4
         with:
