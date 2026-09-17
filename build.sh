@@ -26,12 +26,13 @@ if [[ "$TARGET_OS" == "linux" ]]; then
   cp -f LICENSE "$outdir/LICENSE"
   chmod +x "$outdir/boltdm" "$outdir/boltdm-updater" "$outdir/install-linux.sh"
 
-  archive="dist/BoltDM-linux-${TARGET_ARCH}.tar.gz"
+  archive_name="BoltDM-linux-${TARGET_ARCH}.tar.gz"
+  archive="dist/${archive_name}"
   tar -czf "$archive" -C dist "$package"
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$archive" > "${archive}.sha256"
+    (cd dist && sha256sum "$archive_name" > "${archive_name}.sha256")
   else
-    shasum -a 256 "$archive" > "${archive}.sha256"
+    (cd dist && shasum -a 256 "$archive_name" > "${archive_name}.sha256")
   fi
   echo "Built $archive"
 else
