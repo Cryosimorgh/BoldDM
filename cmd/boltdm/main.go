@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -23,7 +24,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	stateDir := filepath.Join(home, ".boltdm")
+	stateDir := resolveStateDir(home)
 	_ = os.MkdirAll(stateDir, 0o755)
 	if lf, e := os.OpenFile(filepath.Join(stateDir, "boltdm.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); e == nil {
 		defer lf.Close()
@@ -71,7 +72,7 @@ func main() {
 	)
 	defer stopTray()
 	time.Sleep(180 * time.Millisecond)
-	if os.Getenv("BOLTDM_NO_BROWSER") == "" && mgr.Config().LaunchMode != "tray" {
+	if os.Getenv("BOLTDM_NO_BROWSER") == "" && shouldOpenDashboard(runtime.GOOS, mgr.Config().LaunchMode) {
 		_ = openBrowser("http://127.0.0.1:17654")
 	}
 	ch := make(chan os.Signal, 1)
@@ -82,6 +83,34 @@ func main() {
 	case <-srv.ShutdownRequested():
 	}
 	_ = srv.Close()
+}
+
+func resolveStateDir(home string) string {
+	if configured := strings.TrimSpace(os.Getenv("BOLTDM_STATE_DIR")); configured != "" {
+		return configured
+	}
+	return resolveStateDirForOS(home, runtime.GOOS)
+}
+
+func resolveStateDirForOS(home, goos string) string {
+	legacy := filepath.Join(home, ".boltdm")
+	if goos != "linux" {
+		return legacy
+	}
+	// Preserve existing Linux installs before adopting the XDG state location.
+	if st, err := os.Stat(legacy); err == nil && st.IsDir() {
+		return legacy
+	}
+	if xdg := strings.TrimSpace(os.Getenv("XDG_STATE_HOME")); xdg != "" {
+		return filepath.Join(xdg, "boltdm")
+	}
+	return filepath.Join(home, ".local", "state", "boltdm")
+}
+
+func shouldOpenDashboard(goos, launchMode string) bool {
+	// Native tray support currently exists on Windows. On Linux/macOS, never let
+	// a persisted "tray" preference make the process start with no visible UI.
+	return goos != "windows" || launchMode != "tray"
 }
 
 func loadConfig(path string) manager.Config {
