@@ -75,8 +75,8 @@ fi
 if ! command -v aria2c >/dev/null 2>&1; then
   echo "Note: aria2c is optional but required for FTP, SFTP, torrent, magnet and Metalink transfers." >&2
 fi
-if ! command -v zenity >/dev/null 2>&1 && ! command -v kdialog >/dev/null 2>&1; then
-  echo "Note: install zenity or kdialog for a native folder picker; manual paths still work." >&2
+if ! command -v zenity >/dev/null 2>&1; then
+  echo "Note: install zenity for the native folder picker; manual paths still work." >&2
 fi
 
 cat <<EOF
