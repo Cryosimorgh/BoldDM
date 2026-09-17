@@ -153,6 +153,12 @@ func applyEnv(cfg *manager.Config) {
 	if v := os.Getenv("BOLTDM_ARIA2_RPC_SECRET"); v != "" {
 		cfg.Aria2.RPCSecret = v
 	}
+	if v := os.Getenv("BOLTDM_YTDLP_EXECUTABLE"); v != "" {
+		cfg.Media.YTDLPExecutable = v
+	}
+	if v := os.Getenv("BOLTDM_FFMPEG_EXECUTABLE"); v != "" {
+		cfg.Media.FFmpegExecutable = v
+	}
 }
 func openBrowser(url string) error {
 	switch runtime.GOOS {
