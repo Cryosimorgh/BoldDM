@@ -24,15 +24,35 @@ if [[ "$TARGET_OS" == "linux" ]]; then
   cp -f install-linux.sh "$outdir/install-linux.sh"
   cp -f packaging/linux/boltdm.svg "$outdir/boltdm.svg"
   cp -f LICENSE "$outdir/LICENSE"
-  chmod +x "$outdir/boltdm" "$outdir/boltdm-updater" "$outdir/install-linux.sh"
 
-  archive_name="BoltDM-linux-${TARGET_ARCH}.tar.gz"
-  archive="dist/${archive_name}"
+  if [[ "${BOLTDM_BUNDLE_YTDLP:-0}" == "1" ]]; then
+    case "$TARGET_ARCH" in
+      amd64) ytdlp_url="https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux" ;;
+      arm64) ytdlp_url="https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64" ;;
+      *) echo "No bundled yt-dlp binary configured for Linux/$TARGET_ARCH" >&2; exit 1 ;;
+    esac
+    if command -v curl >/dev/null 2>&1; then
+      curl --fail --location --retry 3 --retry-delay 2 "$ytdlp_url" -o "$outdir/yt-dlp"
+    elif command -v wget >/dev/null 2>&1; then
+      wget -O "$outdir/yt-dlp" "$ytdlp_url"
+    else
+      echo "curl or wget is required to bundle yt-dlp" >&2
+      exit 1
+    fi
+  fi
+
+  chmod +x "$outdir/boltdm" "$outdir/boltdm-updater" "$outdir/install-linux.sh"
+  if [[ -f "$outdir/yt-dlp" ]]; then
+    chmod +x "$outdir/yt-dlp"
+  fi
+
+  archive="dist/BoltDM-linux-${TARGET_ARCH}.tar.gz"
   tar -czf "$archive" -C dist "$package"
+  archive_name="$(basename "$archive")"
   if command -v sha256sum >/dev/null 2>&1; then
-    (cd dist && sha256sum "$archive_name" > "${archive_name}.sha256")
+    (cd "$(dirname "$archive")" && sha256sum "$archive_name") > "${archive}.sha256"
   else
-    (cd dist && shasum -a 256 "$archive_name" > "${archive_name}.sha256")
+    (cd "$(dirname "$archive")" && shasum -a 256 "$archive_name") > "${archive}.sha256"
   fi
   echo "Built $archive"
 else
