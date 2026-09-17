@@ -13,6 +13,25 @@ const (
 	StateCanceled    State = "canceled"
 )
 
+type EngineName string
+
+const (
+	EngineAuto   EngineName = "auto"
+	EngineNative EngineName = "native"
+	EngineAria2  EngineName = "aria2"
+)
+
+type SourceKind string
+
+const (
+	SourceDirect   SourceKind = "direct"
+	SourceFTP      SourceKind = "ftp"
+	SourceSFTP     SourceKind = "sftp"
+	SourceMagnet   SourceKind = "magnet"
+	SourceTorrent  SourceKind = "torrent"
+	SourceMetalink SourceKind = "metalink"
+)
+
 type Request struct {
 	URL         string            `json:"url"`
 	Filename    string            `json:"filename,omitempty"`
@@ -20,30 +39,45 @@ type Request struct {
 	Headers     map[string]string `json:"headers,omitempty"`
 	Segments    int               `json:"segments,omitempty"`
 	Connections int               `json:"connections,omitempty"`
+	Engine      EngineName        `json:"engine,omitempty"`
 }
 
 type BatchRequest struct {
 	Downloads []Request `json:"downloads"`
 }
 
+type TaskFile struct {
+	Index      int    `json:"index"`
+	Path       string `json:"path"`
+	Size       int64  `json:"size"`
+	Downloaded int64  `json:"downloaded"`
+	Selected   bool   `json:"selected"`
+}
+
 type Task struct {
-	ID                string            `json:"id"`
-	URL               string            `json:"url"`
-	Filename          string            `json:"filename"`
-	OutputPath        string            `json:"outputPath"`
-	Headers           map[string]string `json:"headers,omitempty"`
-	State             State             `json:"state"`
-	Size              int64             `json:"size"`
-	Downloaded        int64             `json:"downloaded"`
-	SpeedBytesPerSec  int64             `json:"speedBytesPerSec"`
-	Progress          float64           `json:"progress"`
-	Segments          int               `json:"segments"`
-	Connections       int               `json:"connections"`
-	SegmentSetting    int               `json:"segmentSetting,omitempty"`
-	ConnectionSetting int               `json:"connectionSetting,omitempty"`
-	Error             string            `json:"error,omitempty"`
-	CreatedAt         time.Time         `json:"createdAt"`
-	UpdatedAt         time.Time         `json:"updatedAt"`
+	ID                     string            `json:"id"`
+	URL                    string            `json:"url"`
+	Filename               string            `json:"filename"`
+	OutputPath             string            `json:"outputPath"`
+	OutputRoot             string            `json:"outputRoot,omitempty"`
+	Headers                map[string]string `json:"headers,omitempty"`
+	SourceKind             SourceKind        `json:"sourceKind,omitempty"`
+	Engine                 EngineName        `json:"engine,omitempty"`
+	State                  State             `json:"state"`
+	Size                   int64             `json:"size"`
+	Downloaded             int64             `json:"downloaded"`
+	Uploaded               int64             `json:"uploaded,omitempty"`
+	SpeedBytesPerSec       int64             `json:"speedBytesPerSec"`
+	UploadSpeedBytesPerSec int64             `json:"uploadSpeedBytesPerSec,omitempty"`
+	Progress               float64           `json:"progress"`
+	Segments               int               `json:"segments"`
+	Connections            int               `json:"connections"`
+	SegmentSetting         int               `json:"segmentSetting,omitempty"`
+	ConnectionSetting      int               `json:"connectionSetting,omitempty"`
+	Files                  []TaskFile        `json:"files,omitempty"`
+	Error                  string            `json:"error,omitempty"`
+	CreatedAt              time.Time         `json:"createdAt"`
+	UpdatedAt              time.Time         `json:"updatedAt"`
 }
 
 type SegmentProgress struct {
